@@ -1,0 +1,622 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+
+\title{\textbf{Tunes Duel: A Probabilistic Simulation of Music Recommendation Systems}}
+\author{
+Group: 108-301-110\\\n
+Hasan Yiğit Akıncı: 2022400138\\\n
+Ahmet Meriç Kızıltaş: 2022400225\\\n
+Yunus Yücesoy: 2022400273
+}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This project explores music recommendation systems through probabilistic modeling and statistical analysis. Working with a dataset of user ratings and track metadata, the project addresses four interconnected components.
+
+\textbf{Part 1: Conditional Probability Modeling.} This part focuses on estimating conditional probabilities $P(5\star \mid F)$ for various track features—artists, release years, popularity, genres, moods, and audio characteristics. Laplace smoothing should be applied to handle sparse data. The analysis extends to feature interactions $P(5\star \mid F_1, F_2)$ and uses Bayes' rule to compute $P(F \mid 5\star)$, revealing which features dominate among highly-rated songs. Both individual and group-level preference patterns should be examined.
+
+\textbf{Part 2: User Variability Modeling.} This part examines the variable $T_u$, representing the number of rounds until user $u$ assigns their first 5-star rating. Two probability distributions should be fitted and compared: a geometric distribution (assuming homogeneous users) and a Beta-geometric distribution (allowing heterogeneous parameters). Maximum likelihood estimation provides parameter fits, and model comparison determines which framework better captures user behavior. Hypothesis testing explores whether music preference characteristics correlate with discovery speed.
+
+\textbf{Part 3: Recommender System Design.} This part requires designing two distinct recommendation models with contrasting philosophies. Suggested approaches include conditional filtering based on feature preferences, popularity-biased strategies, and utility-based sampling incorporating user patience. The models should integrate insights from Parts 1 and 2.
+
+\textbf{Part 4: Monte Carlo Evaluation.} This part evaluates model performance through simulated user interactions. Three metrics assess recommendation quality: Hit@k (success rate finding 5-star tracks within k recommendations), Average Rating (mean satisfaction), and Time-to-5$\star$ (rounds to first favorite). Confidence intervals and statistical testing determine whether performance differences between models are significant.
+
+\section{Part 1: Conditional Probability Modeling}
+
+\subsection{Introduction}
+In this part, we estimate how likely a song is to receive a 5-star rating by computing conditional probabilities based on track features such as artist, release year, popularity, and audio characteristics. We apply Laplace smoothing to handle sparse data, explore feature interactions, and use Bayes' rule to identify dominant patterns among highly-rated songs. Both global trends and personal/group preferences are analyzed to understand what drives user satisfaction.
+
+\subsection{Tasks}
+
+\subsubsection{Task 1: Global Conditional Probabilities}
+
+\textbf{Implementation:} We first merge the tracks.csv and ratings.csv datasets by matching song\_id with track\_id, creating a unified dataframe containing both rating information and track features. For continuous features like popularity, duration, and available markets count, we apply binning to create categorical groups (e.g., popularity in 10-point bins, duration in minute ranges). 
+
+To compute conditional probabilities $P(5\star \mid \text{Feature})$, we apply Laplace smoothing to handle sparse categories:
+\begin{equation}
+P(5\star \mid F = f) = \frac{\text{Count}(5\star, F=f) + \alpha}{\text{Count}(F=f) + \alpha \cdot |Y|}
+\end{equation}
+where $\alpha = 1$ and $|Y| = 5$ (rating levels). This prevents zero probabilities for rare feature values. We compute these probabilities for all relevant features including artist names, release years, popularity bins, duration bins, explicit flag, mood features (danceability, acoustic, happy, sad, party, relaxed, aggressive, electronic), voice/instrumental ratio, timbre (bright/dark), and genre classifications (Dortmund and Rosamerica).
+
+\subsubsection{Task 2: Feature Interactions}
+
+\textbf{Implementation:} To explore feature interactions, we group the data by feature pairs (e.g., duration and genre, danceability and mood) and compute joint conditional probabilities $P(5\star \mid F_1, F_2)$. We count the total occurrences of each feature combination and the number of 5-star ratings within each combination, then apply Laplace smoothing. We systematically examine all pairwise combinations of audio features, mood features, and structural features to identify effects.
+
+\textbf{Which patterns best predict user preferences?}
+
+Analysis of feature interactions reveals significant effects where the top combination in each category substantially outperforms alternatives:
+
+\begin{itemize}
+    \item \textbf{Mood $\times$ Genre (Rosamerica):} Not-relaxed $\times$ Jazz leads with $P(5\star) = 0.688$ (11 tracks), significantly higher than the second-best Relaxed $\times$ Classical at $0.396$ --- a difference of 0.292.
+    
+    \item \textbf{Mood $\times$ Genre (Dortmund):} Not-relaxed $\times$ Alternative leads with $P(5\star) = 0.636$ (28 tracks), significantly higher than the second-best Relaxed $\times$ Alternative at $0.349$ --- a difference of 0.287.
+    
+    \item \textbf{Danceability $\times$ Genre (Dortmund):} Not-danceable $\times$ Alternative leads with $P(5\star) = 0.619$ (37 tracks), significantly higher than the second-best Not-danceable $\times$ Electronic scores $0.379$ --- a difference of 0.240.
+    
+    \item \textbf{Acoustic $\times$ Genre (Dortmund):} Not-acoustic $\times$ Alternative leads with $P(5\star) = 0.574$ (42 tracks), significantly higher than the second-best Acoustic $\times$ Electronic at $0.379$ --- a difference of 0.195.
+    
+    \item \textbf{Duration $\times$ Genre (Dortmund):} 2-3 min $\times$ Alternative leads with $P(5\star) = 0.571$ (44 tracks), significantly higher than the second-best 3-4 min $\times$ Folk/Country at $0.391$ --- a difference of 0.180.
+\end{itemize}
+
+These interactions reveal that top-ranked feature combinations substantially outperform their second-best alternatives with probability gaps ranging from 0.18 to 0.29. The pattern is consistent across all feature categories: some genre combinations (Alternative, Jazz) paired with specific mood or structural characteristics achieve significantly higher conditional probabilities than other pairings (Electronic, Pop). This demonstrates strong effects where context-dependent combinations capture user preferences more effectively than individual features alone.
+
+\subsubsection{Task 3: Bayesian Interpretation}
+
+\textbf{Implementation:} Using Bayes' rule, we invert the conditional probabilities to compute $P(\text{Feature} \mid 5\star)$:
+\begin{equation}
+P(\text{Feature} = f \mid 5\star) = \frac{P(5\star \mid f) \cdot P(f)}{P(5\star)}
+\end{equation}
+
+This requires computing: (1) the conditional probability $P(5\star \mid f)$ from Task 1, (2) the prior probability $P(f)$ by counting feature occurrences in the full dataset, and (3) the overall 5-star probability $P(5\star)$ from the global distribution. For each feature type, we identify which values dominate the 5-star rating pool by ranking $P(f \mid 5\star)$ in descending order.
+
+\subsubsection{Task 4: Personal and Group Analysis}
+
+\textbf{Implementation:} We load individual user session data from group.csv, which contains ratings from team members. For each user $m$, we compute personalized conditional probabilities $P_m(5\star \mid F)$ using the same Laplace-smoothed formula but restricted to their rating history. To construct group-level estimates, we align all users probabilities by feature value and compute the average:
+\begin{equation}
+P_{\text{group}}(5\star \mid F) = \frac{1}{M} \sum_{m=1}^{M} P_m(5\star \mid F)
+\end{equation}
+where $M$ is the number of team members. This provides a collective preference model that balances individual tastes.
+
+\textbf{Which attributes are collectively favored?}
+
+Group analysis reveals limited collective agreement due to sparse individual rating histories and diverse personal tastes:
+\newline
+\textbf{\indent Features with Insufficient Group Data:}
+\begin{itemize}
+    \item \textbf{Artists:} No collectively favored artists emerged, as users rated different sets of artists with minimal overlap.
+    \item \textbf{Genres:} Insufficient consensus on genre preferences, with users exhibiting distinct musical tastes.
+\end{itemize}
+
+\textbf{Mood Features with Partial Agreement:}
+\begin{itemize}
+    \item \textbf{Danceability:} Group prefers Not-danceable ($P_{\text{group}} = 0.280$) over Danceable ($P_{\text{group}} = 0.143$), though individual preferences vary (U0001: 0.214, U0002: 0.250, U0003: 0.375 for not-danceable).
+    
+    \item \textbf{Acoustic:} Group favors Acoustic ($P_{\text{group}} = 0.269$) over Not-acoustic ($P_{\text{group}} = 0.151$), with consistent preferences across users (U0001: 0.300, U0002: 0.222, U0003: 0.286 for acoustic).
+\end{itemize}
+
+\textbf{Other Mood Features:} Remaining mood characteristics (happy, sad, party, relaxed, aggressive, electronic) show either no collective pattern or insufficient data across all users.
+
+\textbf{Timbre:} No collective preference emerges. Individual users show divergent preferences (U0001 prefers Bright at 0.235, U0002 prefers Dark at 0.286, U0003 shows balanced preferences), resulting in weak group averages (Dark: 0.207, Bright: 0.168).
+
+Group analysis demonstrates that personal music preferences are highly individualistic. Only acoustic mood shows clear collective agreement, while most features exhibit heterogeneous preferences that resist group-level generalization.
+
+\subsection{Discussion}
+
+\textbf{Which artists, release years, or popularity levels have the highest global $P(5\star)$?}
+
+\textbf{Top Artists:}
+\begin{itemize}
+    \item Arctic Monkeys: $P(5\star) = 0.704$ 
+    \item Romeo Santos: $P(5\star) = 0.684$ 
+    \item Soulja Boy: $P(5\star) = 0.667$ 
+    \item Milky Chance: $P(5\star) = 0.667$ 
+    \item WALK THE MOON: $P(5\star) = 0.667$ 
+\end{itemize}
+
+\textbf{Top Release Years:}
+\begin{itemize}
+    \item 2006: $P(5\star) = 0.563$ 
+    \item 2008: $P(5\star) = 0.543$ 
+    \item 2014: $P(5\star) = 0.540$ 
+    \item 2012: $P(5\star) = 0.529$ 
+    \item 2013: $P(5\star) = 0.529$ 
+\end{itemize}
+
+\textbf{Top Popularity Bins:}
+\begin{itemize}
+    \item 90-99: $P(5\star) = 0.557$ 
+    \item 80-89: $P(5\star) = 0.432$ 
+    \item 70-79: $P(5\star) = 0.315$ 
+    \item 60-69: $P(5\star) = 0.207$ 
+\end{itemize}
+
+
+\textbf{Do global probabilities align with your personal favorites?}
+
+To assess alignment between personal preferences and global trends, we use the global baseline $P(5\star) = 0.3329$ with a $\pm 5\%$ margin to determine statistical significance. Songs above $0.3495$ indicate strong global alignment, songs below $0.3162$ reflect personal/niche taste, and songs within this range are statistically neutral.
+
+\textbf{User U0001:}
+\begin{itemize}
+    \item Little Do You Know: Global $P(5\star) = 0.3636$ (Strong Align)
+    \item Save Your Tears (Remix): Global $P(5\star) = 0.3536$ (Strong Align)
+    \item i love you: Global $P(5\star) = 0.3406$ (Around Baseline)
+    \item Alors On Danse: Global $P(5\star) = 0.3258$ (Around Baseline)
+\end{itemize}
+
+\textbf{User U0002:}
+\begin{itemize}
+    \item Impossible: Global $P(5\star) = 0.3728$ (Strong Align)
+    \item Toxic: Global $P(5\star) = 0.3149$ (Personal Taste)
+    \item Low: Global $P(5\star) = 0.3129$ (Personal Taste)
+    \item good 4 u: Global $P(5\star) = 0.2896$ (Personal Taste)
+\end{itemize}
+
+\textbf{User U0003:}
+\begin{itemize}
+    \item R U Mine?: Global $P(5\star) = 0.4094$ (Strong Align)
+    \item Perfect Duet (Ed Sheeran \& Beyoncé): Global $P(5\star) = 0.3269$ (Around Baseline)
+\end{itemize}
+
+Analysis reveals a balanced preference pattern: 40\% of personal favorites show strong alignment with global trends (significantly above baseline), 30\% cluster around the baseline (neutral preference), and 30\% reflect personal/niche taste (significantly below baseline). This balance indicates that while global popularity influences personal ratings, individual taste plays an equally important role in music preferences.
+
+\textbf{Which musical or audio features seem most influential in high ratings?}
+
+Bayesian analysis $P(\text{Feature} \mid 5\star)$ reveals which feature values dominate the 5-star rating pool:
+
+\textbf{Most Prevalent Artists in 5-Star Ratings:}
+\begin{itemize}
+    \item Taylor Swift (3.25\%), Adele (2.15\%), Ariana Grande (1.55\%), One Direction (1.50\%), Lana Del Rey (1.50\%)
+\end{itemize}
+
+\textbf{Audio Feature Distribution Among 5-Star Ratings:}
+\begin{itemize}
+    \item \textbf{Danceability:} Danceable (69.6\%) vs Not-danceable (30.4\%)
+    \item \textbf{Mood - Electronic:} Electronic (63.7\%) vs Not-electronic (36.3\%)
+    \item \textbf{Mood - Acoustic:} Not-acoustic (78.4\%) vs Acoustic (21.6\%)
+    \item \textbf{Mood - Aggressive:} Not-aggressive (94.1\%) vs Aggressive (5.9\%)
+    \item \textbf{Mood - Happy:} Not-happy (68.0\%) vs Happy (32.0\%)
+    \item \textbf{Mood - Party:} Not-party (68.6\%) vs Party (31.4\%)
+    \item \textbf{Mood - Relaxed:} Relaxed (71.5\%) vs Not-relaxed (28.5\%)
+    \item \textbf{Mood - Sad:} Not-sad (76.0\%) vs Sad (24.0\%)
+    \item \textbf{Gender:} Female (72.0\%) vs Male (28.0\%)
+    \item \textbf{Voice Type:} Voice (62.4\%) vs Instrumental (37.6\%)
+    \item \textbf{Timbre:} Bright (55.7\%) vs Dark (44.3\%)
+\end{itemize}
+
+\textbf{Genre Distribution in 5-Star Ratings:}
+\begin{itemize}
+    \item \textbf{Dortmund:} Electronic (96.0\%), Folk/Country (2.4\%), Alternative (1.0\%)
+    \item \textbf{Rosamerica:} Pop (41.9\%), Rhythm (27.6\%), Rock (10.0\%), Hip-hop (9.9\%), Dance (8.5\%)
+\end{itemize}
+
+Electronic genre dominates at 96.0\%, followed by Pop (41.9\%) in alternative taxonomy. Mood features show Not-aggressive (94.1\%), Not-acoustic (78.4\%), Not-sad (76.0\%), Relaxed (71.5\%), Danceable (69.6\%), and Not-happy (68.0\%) as prevalent characteristics. Female vocals (72.0\%) substantially outnumber male (28.0\%). Voice type (62.4\%) and Timbre bright (55.7\%) show more balanced distributions. Artist prevalence remains diverse with Taylor Swift leading at 3.25\%. Constructing a typical 5-star profile using the top five prevalence rates yields: Electronic genre with not-aggressive, not-acoustic, not-sad moods and female vocals.
+
+\textbf{How do personal sessions differ from global and group-level tendencies?}
+
+Comparative analysis across three levels reveals substantial variance in music preferences:
+
+\textbf{Individual Divergence Patterns:}
+\begin{itemize}
+    \item \textbf{U0001:} Balanced profile with 50\% global alignment and 50\% baseline-level preferences. Shows moderate conformity to global trends while maintaining some personal distinctions.
+    
+    \item \textbf{U0002:} Highly individualistic with 75\% personal taste selections significantly below baseline. Exhibits strongest divergence from global patterns, favoring niche songs that are not widely appreciated.
+    
+    \item \textbf{U0003:} Mixed profile with 50\% global alignment and 50\% baseline-level preferences, similar to U0001 but with fewer data points limiting detailed characterization.
+\end{itemize}
+
+\textbf{Comparison with Global Trends:}
+
+Personal alignment rates vary significantly across users. While 40\% of all personal favorites align with global trends (above $0.3495$ threshold), the remaining 60\% either cluster around baseline (30\%) or fall into personal/niche territory (30\%). This distribution indicates that individual music taste is partially influenced by global popularity but not dominated by it. Each user exhibits a unique balance between conformity and individuality, with U0002 showing the strongest personal divergence (75\% below threshold) and U0001/U0003 showing more balanced patterns.
+
+\textbf{Comparison with Group Averages:}
+
+Group-level analysis provides limited insight due to sparse individual rating histories and minimal overlap in rated songs. Users rated largely disjoint sets of artists and tracks, preventing meaningful collective preference identification for most features. Where group averages exist (Acoustic: $0.269$, Not-danceable: $0.280$), they mask substantial individual heterogeneity rather than representing shared taste. For example, timbre preferences show complete divergence (U0001: Bright, U0002: Dark, U0003: balanced), yet averaging produces values that accurately describe none of the individual users.
+
+\textbf{Conclusion:}
+
+Personal sessions demonstrate high individuality that resists both global and group-level generalization. The wide variation in alignment rates (25\%-50\%) and the failure of group averages to capture individual preferences highlight the subjective nature of music taste. This heterogeneity strongly supports the need for personalized recommendation systems that adapt to individual user patterns rather than relying on aggregate statistics or collective filtering alone.
+
+\section{Part 2: User Variability Modeling}
+
+\subsection{Introduction}
+Not all users exhibit the same patience or selectiveness when evaluating music recommendations. Some users quickly find tracks they love, while others require many recommendations before rating a song 5-stars. To capture this variability, we model $T_u$, the number of recommendation rounds until user $u$ gives their first 5-star rating. We compare two probabilistic frameworks: a simple geometric distribution assuming homogeneous user behavior, and a hierarchical Beta-geometric distribution that accounts for individual differences in hit probability. Statistical hypothesis testing further investigates whether user preferences for popular versus niche music correlate with faster discovery times.
+
+\subsection{Modeling Tasks}
+
+\subsubsection{Geometric Model}
+
+\textbf{Implementation:} Under the geometric model, we assume all users share a constant probability $p$ of rating any recommended song as 5-stars. The waiting time $T_u$ follows a geometric distribution:
+\begin{equation}
+P(T_u = t) = (1-p)^{t-1} \cdot p, \quad t = 1, 2, 3, \ldots
+\end{equation}
+
+The maximum likelihood estimator for $p$ is:
+\begin{equation}
+\hat{p} = \frac{1}{\bar{T}}
+\end{equation}
+where $\bar{T}$ is the sample mean of $T_u$ values across all users. We compute the log-likelihood:
+\begin{equation}
+\ell(p) = \sum_{u=1}^{N} \left[ (T_u - 1) \log(1-p) + \log(p) \right]
+\end{equation}
+to assess model fit. Users who never rate any song 5-stars within the session are excluded from analysis.
+
+\textbf{Results:} Among 291 users with at least one 5-star rating:
+\begin{itemize}
+    \item Average waiting time: $\bar{T} = 3.6942$ rounds
+    \item Estimated hit probability: $\hat{p} = 0.2707$ (approximately 27.1\% per recommendation)
+    \item Log-likelihood: $\ell(\hat{p}) = -627.7479$
+\end{itemize}
+
+The geometric model suggests that on average, users require approximately 3.7 recommendations before encountering a 5-star track, corresponding to a roughly 1-in-4 success rate per trial.
+
+\subsubsection{Beta-Geometric Model}
+
+\textbf{Implementation:} The Beta-geometric model relaxes the homogeneity assumption by allowing each user $u$ to have their own success probability $p_u \sim \text{Beta}(\alpha, \beta)$. Marginalizing over the user-level heterogeneity yields the Beta-geometric distribution:
+\begin{equation}
+P(T_u = t \mid \alpha, \beta) = \frac{B(\alpha + 1, \beta + t - 1)}{B(\alpha, \beta)}
+\end{equation}
+where $B(\cdot, \cdot)$ denotes the Beta function. The expected waiting time under this model is:
+\begin{equation}
+E[T_u] = 1 + \frac{\beta}{\alpha}
+\end{equation}
+
+To estimate parameters $(\alpha, \beta)$, we maximize the log-likelihood:
+\begin{equation}
+\ell(\alpha, \beta) = \sum_{u=1}^{N} \left[ \log B(\alpha + 1, \beta + T_u - 1) - \log B(\alpha, \beta) \right]
+\end{equation}
+
+Since the Beta function involves products of gamma functions that can cause numerical overflow, we work with the log-Beta function:
+\begin{equation}
+\log B(a, b) = \log \Gamma(a) + \log \Gamma(b) - \log \Gamma(a+b)
+\end{equation}
+which remains numerically stable. The log-likelihood becomes:
+\begin{equation}
+\ell(\alpha, \beta) = \sum_{u=1}^{N} \left[ \log \Gamma(\alpha + 1) + \log \Gamma(\beta + T_u - 1) - \log \Gamma(\alpha + \beta + T_u) - \log B(\alpha, \beta) \right]
+\end{equation}
+
+We optimize this function using an iterative gradient-based search algorithm. Starting from initial parameter values $\alpha_0 = 1.0$ and $\beta_0 = 1.0$, the algorithm explores the parameter space by testing incremental adjustments in both $\alpha$ and $\beta$ directions. At each iteration, the algorithm evaluates the log-likelihood for candidate parameter pairs: $(\alpha + \Delta, \beta)$, $(\alpha - \Delta, \beta)$, $(\alpha, \beta + \Delta)$, and $(\alpha, \beta - \Delta)$, where $\Delta$ is the step size. The algorithm selects the direction yielding the greatest improvement in log-likelihood and updates the parameters accordingly. The step size adapts dynamically: increasing by 20\% after successful improvements to accelerate convergence, and decreasing by 50\% when no improvement is found to refine the search. The process terminates when the step size falls below a tolerance threshold ($10^{-5}$) or after reaching a maximum number of iterations (1000). Throughout optimization, parameter bounds ensure $\alpha, \beta > 0$ to maintain valid Beta distributions.
+
+\textbf{Results:} The fitted Beta-geometric model yields:
+\begin{itemize}
+    \item Optimal parameters: $\hat{\alpha} = 3.0359$, $\hat{\beta} = 5.5669$
+    \item Implied average waiting time: $E[T_u] = 1 + \frac{5.5669}{3.0359} = 2.8337$ rounds
+    \item Log-likelihood: $\ell(\hat{\alpha}, \hat{\beta}) = -611.1832$
+\end{itemize}
+
+\textbf{Model Comparison:} The Beta-geometric model achieves a substantially higher log-likelihood ($-611.18$ vs. $-627.75$, improvement of $16.56$), indicating superior fit. This improvement confirms significant user-level heterogeneity: some users are inherently more selective (lower $p_u$) while others accept recommendations more readily (higher $p_u$). The Beta distribution parameters $\alpha = 3.04$ and $\beta = 5.57$ imply a right-skewed distribution of hit probabilities, with most users having moderate-to-low success rates and a tail of highly selective users.
+
+\subsection{Hypothesis Testing}
+
+\textbf{Research Question:} Do users who prefer popular music find 5-star tracks faster than those who prefer niche music?
+
+\textbf{Methodology:} We partition users into two groups based on their average track popularity preference:
+\begin{itemize}
+    \item \textbf{Group A (Popular Music Lovers):} Users whose average rated track popularity $\geq$ median (74.8)
+    \item \textbf{Group B (Niche Music Lovers):} Users whose average rated track popularity $<$ median (74.8)
+\end{itemize}
+
+We formulate hypotheses:
+\begin{align}
+H_0 &: \mu_A = \mu_B \quad \text{(no difference in mean waiting times)} \\
+H_1 &: \mu_A \neq \mu_B \quad \text{(groups differ significantly)}
+\end{align}
+
+Given that $T_u$ distributions are discrete and potentially skewed, we apply the nonparametric \textbf{Mann-Whitney U test} rather than a t-test. The test ranks all waiting times and compares rank sums between groups. We implement the test manually, including tie correction and large-sample normal approximation for p-value computation.
+
+\textbf{Results:}
+\begin{itemize}
+    \item \textbf{Group A (Popular Music Lovers):} $n_A = 146$ users, mean waiting time $\bar{T}_A = 2.92$ rounds
+    \item \textbf{Group B (Niche Music Lovers):} $n_B = 145$ users, mean waiting time $\bar{T}_B = 4.48$ rounds
+    \item \textbf{Mann-Whitney U test:} $p = 0.0030$ (highly significant at $\alpha = 0.05$ level)
+\end{itemize}
+
+\textbf{Interpretation:} The test provides strong evidence against $H_0$ ($p < 0.01$). Users who favor popular music find 5-star tracks approximately 1.56 rounds faster on average (35\% reduction in waiting time). This difference is both statistically significant (unlikely due to chance) and practically meaningful (substantial reduction in recommendation rounds). The result suggests that popular tracks have broader appeal and higher baseline quality, enabling faster convergence to user satisfaction.
+
+\subsection{Discussion}
+
+\textbf{How do the geometric and Beta-geometric models differ in describing user variability?}
+
+The geometric model assumes all users behave identically with a fixed success probability $p = 0.2707$, implying homogeneous patience and selectiveness. In contrast, the Beta-geometric model explicitly models heterogeneity by allowing individual success probabilities $p_u \sim \text{Beta}(3.04, 5.57)$. The 16.56-point log-likelihood improvement decisively favors the heterogeneous model, confirming that users exhibit diverse hit rates rather than uniform behavior. While the geometric model predicts an average of 3.69 rounds, the Beta-geometric model predicts 2.83 rounds, better capturing the reality that many users find favorites quickly while a subset requires extended exploration.
+
+\textbf{What do the fitted parameters suggest about user patience or selectiveness?}
+
+The geometric model's $\hat{p} = 0.2707$ suggests a baseline 27\% acceptance rate per recommendation. However, the Beta-geometric parameters $(\alpha = 3.04, \beta = 5.57)$ reveal a more nuanced picture. The ratio $\beta/\alpha = 1.83$ indicates that the average user leans toward selectiveness (mean $p_u \approx 0.35$ under Beta distribution). The moderate $\alpha$ value suggests substantial variance in user behavior: while the mode of the Beta distribution favors moderately selective users, the right tail captures highly patient users requiring many trials. This aligns with real-world observation that recommendation systems must serve both users liking easily with high $p_u$ and users liking hardly with low $p_u$.
+
+\textbf{Were any significant differences found between user groups in hypothesis tests?}
+
+Yes. The Mann-Whitney U test yielded $p = 0.0030$, providing strong evidence that users preferring popular music (average track popularity $\geq 74.8$) find 5-star tracks significantly faster (2.92 rounds) than users preferring niche music (4.48 rounds). This 35\% reduction in waiting time is both statistically robust and practically substantial. The finding suggests that popularity serves as a proxy for broader appeal: mainstream tracks satisfy diverse tastes more efficiently, while niche tracks require more trials to match individual preferences. This insight has direct implications for recommendation algorithms—systems serving popularity-focused users can afford simpler strategies, while niche-oriented users benefit from more sophisticated personalization to reduce exploration costs.
+
+\section{Part 3: Recommender Design}
+
+\subsection{Introduction}
+Building upon the probabilistic foundations established in Parts 1 and 2, we design two distinct recommendation algorithms that translate conditional probability models and user variability insights into actionable recommendation strategies. Model A implements a deterministic, feature-based approach that personalizes recommendations by aggregating user sentiment across track features weighted by global quality confidence. Model B extends this foundation with a probabilistic sampling mechanism that adapts to user patience levels, balancing exploitation of high-confidence recommendations with exploration of diverse alternatives. Both models leverage the 18-feature conditional probability framework from Part 1 (artist, year, popularity, genres, moods, vocal characteristics) and the patience metrics ($T_u$) from Part 2 to deliver personalized, context-aware music recommendations.
+
+\subsection{Model A: Deterministic Feature Matcher}
+
+\subsubsection{Design Philosophy}
+Model A adopts a deterministic, personalized approach that identifies tracks matching user preferences through weighted feature alignment. The model constructs a utility score $U_u(i)$ for each candidate track $i$ by combining global feature quality $P(5\star \mid F)$ with user-specific feature sentiment derived from rating history. This design prioritizes transparency and interpretability: recommendations directly reflect which features (genres, moods, artists) the user has endorsed or rejected in past ratings.
+
+\subsubsection{Implementation}
+
+\textbf{Pre-computation Phase:} During initialization, the system pre-computes global conditional probabilities $P(5\star \mid F = f)$ for all 18 features using the Laplace-smoothed estimator from Part 1:
+\begin{equation}
+P(5\star \mid F = f) = \frac{\text{Count}(5\star, F=f) + 1}{\text{Count}(F=f) + 5}
+\end{equation}
+These probabilities are stored in lookup dictionaries for $O(1)$ retrieval, enabling efficient scoring of thousands of candidate tracks.
+
+\textbf{Scoring System:} For a user $u$ with rating history $H_u = \{(s_1, r_1), \ldots, (s_n, r_n)\}$ where $s_j$ is a track and $r_j \in \{1,2,3,4,5\}$ is the rating, the utility score for candidate track $i$ is computed as:
+\begin{equation}
+U_u(i) = U_{\text{base}}(i) + U_{\text{personalized}}(i)
+\end{equation}
+
+The base score captures global track quality independent of user preferences:
+\begin{equation}
+U_{\text{base}}(i) = 0.1 \cdot \sum_{F \in \mathcal{F}} P(5\star \mid F = f_i)
+\end{equation}
+where $\mathcal{F}$ is the set of 18 features and $f_i$ denotes track $i$'s value for feature $F$. The small weight (0.1) ensures that this term provides a baseline ranking for cold-start scenarios without dominating personalized signals.
+
+The personalized score aggregates user sentiment across features:
+\begin{equation}
+U_{\text{personalized}}(i) = \sum_{F \in \mathcal{F}} V_u(F = f_i) \cdot P(5\star \mid F = f_i)
+\end{equation}
+
+where $V_u(F = f)$ is the user's accumulated vote for feature value $f$:
+\begin{equation}
+V_u(F = f) = \sum_{\substack{(s_j, r_j) \in H_u \\ F(s_j) = f}} I(r_j) \cdot W(F)
+\end{equation}
+
+Here, $I(r)$ maps ratings to sentiment impact:
+\begin{equation}
+I(r) = \begin{cases}
++2.0 & r = 5 \text{ (Strong Love)} \\
++1.0 & r = 4 \text{ (Like)} \\
+0.0 & r = 3 \text{ (Neutral)} \\
+-1.0 & r = 2 \text{ (Dislike)} \\
+-2.0 & r = 1 \text{ (Hate)}
+\end{cases}
+\end{equation}
+
+and $W(F)$ assigns feature importance weights reflecting their predictive power and semantic significance:
+\begin{equation}
+W(F) = \begin{cases}
+2.25 & F = \text{Genre (Rosamerica)} \\
+1.80 & F = \text{Genre (Dortmund)} \\
+1.60 & F = \text{Release Year} \\
+1.25 & F = \text{Artist} \\
+1.20 & F \in \text{Mood Features} \\
+1.00 & F \in \{\text{Popularity, Gender, Explicit}\} \\
+0.75 & F = \text{Duration}
+\end{cases}
+\end{equation}
+
+\textbf{Temporal Smoothing:} For the release year feature, votes are distributed to neighboring years to account for stylistic continuity:
+\begin{equation}
+V_u(\text{Year} = y) = \sum_{\substack{(s_j, r_j) \in H_u \\ |\text{Year}(s_j) - y| \leq 5}} I(r_j) \cdot W(\text{Year}) \cdot \delta(\text{Year}(s_j), y)
+\end{equation}
+where $\delta(y_j, y) = 1.0$ if $y_j = y$ and $\delta(y_j, y) = 0.5$ if $|y_j - y| \in \{1,2,3,4,5\}$. This temporal smoothing prevents overfitting to specific years and generalizes preferences to stylistic eras.
+
+\textbf{Confidence Scaling:} The multiplication by $P(5\star \mid F = f_i)$ in Equation (20) serves as confidence scaling. A user's positive vote for a feature carries more weight if that feature globally correlates with 5-star ratings. For example, if a user rates two Rock tracks with 5-stars, the accumulated vote is $V_u(\text{Rock}) = 2 \times 2.0 \times 2.25 = 9.0$. If Rock has high global quality $P(5\star \mid \text{Rock}) = 0.80$, the contribution becomes $9.0 \times 0.80 = 7.2$. However, if the user similarly endorses a niche genre with $P(5\star) = 0.30$, the contribution would be only $9.0 \times 0.30 = 2.7$, reflecting lower confidence in this preference generalizing to unrated tracks.
+
+\textbf{Output:} Candidates are ranked deterministically by descending $U_u(i)$, and the top-5 tracks are returned. This ensures consistent recommendations for repeated queries with identical user histories.
+
+\subsection{Model B: Hybrid Utility-Based Sampling}
+
+\subsubsection{Design Philosophy}
+Model B adopts a probabilistic sampling strategy that balances exploitation (recommending high-scoring tracks) with exploration (testing diverse alternatives). The model extends Model A's utility scores with a patience-adaptive mechanism: users who quickly found 5-star tracks in their history (low $T_u$) receive exploitation-focused recommendations emphasizing top scores, while users requiring many trials (high $T_u$) receive exploration-focused recommendations with flattened probability distributions. This design personalizes the exploration-exploitation trade-off based on empirical user behavior from Part 2.
+
+\subsubsection{Implementation}
+
+\textbf{\indent Step 1: Base Utility Computation.} Model B reuses Model A's scoring function to compute $U_u(i)$ for all candidates. This provides the foundation of personalized quality estimates rooted in feature-based conditional probabilities.
+
+\textbf{Step 2: User Patience Estimation.} For the current user session, we compute the observed time-to-favorite $T_u$ by identifying the round index of the first 5-star rating:
+\begin{equation}
+T_u = \min\{t : r_t = 5, (s_t, r_t) \in H_u\}
+\end{equation}
+If no 5-star rating exists yet, we estimate $T_u = |H_u| + 1$ (optimistically assuming the next recommendation will succeed).
+
+\textbf{Step 3: Patience-Based Adjustment.} We define a patience factor relative to the population average from Part 2:
+\begin{equation}
+\Delta_u = T_u - \bar{T} = T_u - 3.6942
+\end{equation}
+
+Negative $\Delta_u$ indicates an impatient user (found favorites quickly), while positive $\Delta_u$ indicates patience (required many trials). We apply MinMax normalization to convert raw utility scores to the $[0,1]$ range:
+\begin{equation}
+\tilde{U}_u(i) = \frac{U_u(i) - \min_j U_u(j)}{\max_j U_u(j) - \min_j U_u(j)}
+\end{equation}
+
+then apply an additive adjustment:
+\begin{equation}
+W_u(i) = \max\left(0, \tilde{U}_u(i) + \lambda \cdot \Delta_u\right)
+\end{equation}
+where $\lambda = 0.05$ is the adjustment magnitude hyperparameter. The $\max(0, \cdot)$ ensures non-negative sampling weights.
+
+\textbf{Interpretation:}
+\begin{itemize}
+    \item \textbf{Impatient users} ($\Delta_u < 0$): The negative adjustment reduces low-scoring candidates' weights disproportionately, steepening the probability distribution toward top-ranked tracks. This emphasizes exploitation—recommending the safest, highest-confidence options to satisfy users who demonstrated quick satisfaction historically.
+    
+    \item \textbf{Patient users} ($\Delta_u > 0$): The positive adjustment raises all weights uniformly, flattening the probability distribution. This increases the likelihood of sampling mid-ranked tracks, promoting exploration of diverse options. Patient users demonstrated willingness to explore, so the system respects this by diversifying recommendations.
+\end{itemize}
+
+\textbf{Step 4: Probabilistic Sampling.} We normalize the adjusted weights to form a probability distribution:
+\begin{equation}
+P_u(i) = \frac{W_u(i)}{\sum_{j \in \mathcal{C}} W_u(j)}
+\end{equation}
+where $\mathcal{C}$ is the set of unrated candidate tracks. We then sample $k=5$ tracks without replacement according to $P_u(i)$. This introduces stochasticity: repeated queries may yield different recommendations, increasing coverage and reducing filter bubble effects.
+
+\textbf{Output:} The top-5 sampled tracks are returned as recommendations. Unlike Model A's deterministic ranking, Model B produces stochastic results—repeated queries with identical user histories may yield different recommendations due to probabilistic sampling. This variability introduces serendipity and prevents recommendation staleness, while the patience-adaptive weighting ensures that the sampling distribution respects user-specific exploration preferences.
+
+\subsection{Model Comparison}
+
+\textbf{Contrasting Design Philosophies:}
+
+The two models embody fundamentally different recommendation strategies:
+
+\begin{itemize}
+    \item \textbf{Model A (Deterministic Feature Matcher):} Prioritizes precision and interpretability. Recommendations are deterministic—identical user histories always yield identical results. The scoring system transparently aggregates user sentiment across features, making it easy to explain why a track was recommended. This model assumes users want consistent, predictable recommendations that closely match their explicit preferences.
+    
+    \item \textbf{Model B (Hybrid Utility-Based Sampling):} Prioritizes adaptability and exploration. Recommendations are probabilistic—repeated queries introduce variation, exposing users to diverse content beyond their immediate preference clusters. The patience-adaptive mechanism personalizes the exploration-exploitation trade-off: impatient users receive focused, safe recommendations (exploitation), while patient users receive diverse, risky recommendations (exploration). This model assumes user patience signals are informative about their willingness to discover new content.
+\end{itemize}
+
+\textbf{Integration of Probabilistic Insights:}
+
+\textbf{From Part 1:} Both models leverage the 18 feature conditional probability framework $P(5\star \mid F)$ as their foundation. Model A uses these probabilities for confidence scaling—features with high global 5-star correlation amplify user votes, while weak features are discounted. Model B inherits this same mechanism through its reuse of Model A's scoring function.
+
+\textbf{From Part 2:} Model B uniquely operationalizes the user variability findings from Part 2. The geometric model's average waiting time $\bar{T} = 3.6942$ serves as the pivot point for the patience adjustment mechanism. The Beta-geometric model's discovery that users exhibit heterogeneous patience levels ($\alpha = 3.04$, $\beta = 5.57$) directly motivates Model B's differential treatment of patient versus impatient users. By estimating $T_u$ in real-time and applying the $\Delta_u = T_u - 3.6942$ adjustment, Model B personalizes not just content features but recommendation strategy. Model A, in contrast, treats all users uniformly with deterministic ranking, ignoring patience heterogeneity.
+
+\textbf{Performance Trade-offs:}
+
+\begin{itemize}
+    \item \textbf{Consistency vs. Diversity:} Model A provides consistent recommendations, beneficial for users who know their preferences and want reliable results. Model B sacrifices consistency for diversity, reducing filter bubbles and increasing long-term engagement through discoveries.
+    
+    \item \textbf{Short-term vs. Long-term Satisfaction:} Model A optimizes for immediate satisfaction by recommending the highest-scoring tracks. Model B balances short-term and long-term goals: patient users receive exploration that may yield lower immediate satisfaction but higher long-term discovery value.
+    
+    \item \textbf{Interpretability vs. Adaptability:} Model A's deterministic scoring is fully interpretable—each recommendation can be traced to specific feature votes. Model B's probabilistic sampling obscures this interpretability but gains adaptability to user-specific exploration preferences.
+\end{itemize}
+
+\textbf{Expected Use Cases:}
+
+\begin{itemize}
+    \item \textbf{Model A:} Ideal for users seeking more of what they liked features scenarios, such as curating playlists for specific moods or discovering similar artists. The deterministic nature ensures predictable, high-confidence recommendations that closely match explicit preferences.
+    
+    \item \textbf{Model B:} Ideal for discovery-oriented scenarios where users want to expand their musical horizons. The patience-adaptive mechanism ensures that users who demonstrate willingness to explore (high $T_u$) receive diverse recommendations, while users seeking quick satisfaction (low $T_u$) receive focused, safe options. This dual-mode behavior makes Model B suitable for both casual browsing and deep exploration sessions.
+\end{itemize}
+
+\subsection{Preliminary Testing}
+
+Both models were implemented in the MusicRecommender class part3.py with methods recommend\_model\_a and recommend\_model\_b. The recommender.py module provides a standardized query interface that wraps these algorithms for the Tune Duel platform. Internal testing with sample user sessions confirmed that both models execute correctly: Model A produces deterministic recommendations that remain consistent across repeated queries with identical input, while Model B generates probabilistic samples with patience-adaptive weighting that introduce controlled variation. All test cases executed without errors, validating implementation correctness and readiness for comprehensive evaluation.
+
+\section{Part 4: Monte Carlo Evaluation}
+
+\subsection{Introduction}
+Having designed two distinct recommendation models in Part 3, we now evaluate their performance through Monte Carlo simulation. This statistical approach generates thousands of simulated user interactions to estimate expected performance across key metrics: Hit@5 success rate, average rating satisfaction, and time-to-favorite efficiency. By quantifying confidence intervals for performance differences, we determine which model delivers superior recommendations and assess whether observed advantages are statistically significant and practically meaningful.
+
+\subsection{Methodology}
+
+\subsubsection{Simulation Setup}
+
+We conduct 3,000 independent trials (300 users $\times$ 10 trials each) using a controlled experimental design:
+
+\textbf{Ground Truth Assumption:} % To be filled later
+
+\textbf{Trial Procedure:} For each trial:
+\begin{enumerate}
+    \item \textbf{Seed Selection:} Randomly select a contiguous 5-song sequence from the user's historical rating session. This seed provides context for personalized recommendations while ensuring diverse starting points across trials.
+    
+    \item \textbf{Recommendation Generation:} Both Model A and Model B independently generate top-5 recommendations ($k=5$) based on the seed context.
+    
+    \item \textbf{Oracle Evaluation:} Query the oracle to obtain ground-truth ratings $r_{ui}$ for all 10 recommended tracks (5 from each model). These ratings determine metric outcomes without subjective noise.
+\end{enumerate}
+
+\textbf{Independence:} Each trial uses a freshly sampled seed, ensuring statistical independence. Models operate in identical conditions—same seed context, same candidate pool—eliminating confounding variables.
+
+\subsubsection{Performance Metrics}
+
+Three complementary metrics assess recommendation quality:
+
+\textbf{Hit@5:} Binary indicator of whether at least one recommended track receives a 5-star rating from the oracle:
+\begin{equation}
+\text{Hit@5}_u = \begin{cases}
+1 & \text{if } \exists i \in \text{Top-5}: r_{ui} = 5 \\
+0 & \text{otherwise}
+\end{cases}
+\end{equation}
+Aggregated success rate: $\text{Hit@5} = \frac{1}{N} \sum_{u=1}^{N} \text{Hit@5}_u$, where $N=3000$ trials. This metric directly addresses the Part 2 question: how efficiently do models surface songs users love?
+
+\textbf{Average Rating:} Mean rating across all recommended tracks:
+\begin{equation}
+\text{AvgRating}_u = \frac{1}{5} \sum_{i=1}^{5} r_{ui}
+\end{equation}
+Higher values indicate better overall recommendation quality beyond just finding favorites—capturing whether even non-5-star recommendations maintain high satisfaction.
+
+\textbf{Time-to-5$\star$:} Position of the first 5-star recommendation within the top-5 list:
+\begin{equation}
+T_u^{(5)} = \begin{cases}
+\min\{i : r_{ui} = 5, i \in [1,5]\} & \text{if hit exists} \\
+6 & \text{otherwise (penalty)}
+\end{cases}
+\end{equation}
+This metric parallels the $T_u$ variable from Part 2, measuring how quickly users encounter favorites. Lower values indicate superior ranking—placing loved songs earlier in the recommendation list.
+
+\subsubsection{Statistical Analysis}
+
+For each metric, we compute the performance difference $\Delta = \mu_A - \mu_B$ between Model A and Model B, where $\mu$ denotes the sample mean across 3,000 trials. To quantify uncertainty, we construct 95\% confidence intervals using Welch's method:
+
+\begin{equation}
+\text{CI}_{95\%}(\Delta) = \Delta \pm 1.96 \cdot \text{SE}(\Delta)
+\end{equation}
+
+where the standard error is:
+\begin{equation}
+\text{SE}(\Delta) = \sqrt{\frac{s_A^2}{n_A} + \frac{s_B^2}{n_B}}
+\end{equation}
+
+with $s^2$ denoting sample variance and $n = 3000$ for both models. Statistical significance is determined by whether zero lies outside the confidence interval: if $0 \notin [\Delta_{\text{lower}}, \Delta_{\text{upper}}]$, we conclude the performance difference is unlikely due to random chance ($p < 0.05$).
+
+\subsection{Results}
+
+Table 1 summarizes the Monte Carlo evaluation across all metrics. Model A demonstrates superior performance in all three dimensions with statistically significant margins.
+
+\begin{table}[H]
+\centering
+\caption{Monte Carlo Evaluation Results (3,000 trials, $k=5$)}
+\label{tab:mc_results}
+\begin{tabular}{lcccl}
+\toprule
+\textbf{Metric} & \textbf{Model A} & \textbf{Model B} & \textbf{Difference (A - B)} & \textbf{Significant?} \\
+\midrule
+Hit@5 (\%) & 82.67 & 63.03 & +19.63 [+17.44, +21.83] & YES \\
+Avg Rating & 4.38 & 3.62 & +0.76 [+0.73, +0.79] & YES \\
+Time-to-5$\star$ & 2.33 & 3.71 & -1.38 [-1.48, -1.28] & YES \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Hit@5}
+
+Model A achieves an 82.67\% success rate, meaning that in approximately 4 out of 5 trials, at least one recommended track receives a 5-star rating. Model B's 63.03\% rate is substantially lower, yielding a 19.63 percentage point advantage for Model A. In relative terms, Model A surfaces favorite tracks 30\% more reliably than Model B.
+
+\textbf{Discussion:} The 20-percentage-point improvement is both statistically significant and practically meaningful. The confidence interval [+17.44\%, +21.83\%] excludes zero with wide margin, providing robust statistical evidence against the null hypothesis of no difference ($p < 0.05$). For practical impact, this translates to 1 additional successful recommendation per 5 users on a platform serving millions, representing substantial user satisfaction gains and potential engagement increases. The 30\% relative improvement indicates experientially noticeable quality enhancement in recommendation accuracy.
+
+\subsubsection{Average Rating}
+
+Model A's recommendations average 4.38 stars, indicating consistently high-quality suggestions even when 5-star favorites are absent. Model B averages 3.62 stars—still above neutral but 0.76 points lower. On a 5-point scale, this represents a 0.76-star difference favoring Model A.
+
+\textbf{Discussion:} The difference is both statistically significant and practically meaningful. The confidence interval [+0.73, +0.79] is extremely narrow (±0.03 margin), indicating high statistical precision and confirming that this advantage is not due to random sampling variation ($p < 0.05$). Nearly a full star improvement (0.76 points, or 15\% of the scale) is experientially noticeable—users would perceive Model A's recommendations as consistently better-quality compared to Model B. This metric captures overall recommendation quality beyond just finding 5-star favorites, demonstrating that Model A maintains high satisfaction even for non-perfect matches.
+
+\subsubsection{Time-to-5$\star$:}
+
+Model A places the first 5-star track at position 2.33 on average, meaning users typically encounter a favorite within the top 2-3 recommendations. Model B requires 3.71 positions on average—nearly 60\% more exploration. The difference of -1.38 positions strongly favors Model A, indicating superior ranking ability.
+
+\textbf{Discussion:} The difference is both statistically significant and practically meaningful. The confidence interval [-1.48, -1.28] excludes zero, confirming robust statistical evidence ($p < 0.05$). Reducing exploration by 1-2 positions effectively halves the time users spend searching for favorites, directly improving user experience by minimizing frustration and accelerating satisfaction. This metric parallels the $T_u$ variable from Part 2, demonstrating that Model A's personalization reduces discovery time compared to both Model B and the population baseline (3.69 rounds). The consistency across all three metrics—Hit@5, Average Rating, and Time-to-5$\star$—demonstrates robust superiority rather than narrow optimization for a single objective.
+
+\subsection{Reflection \& Discussion}
+
+\textbf{How do results relate to Part 3 design choices?}
+
+The Monte Carlo evaluation directly validates Model A's core design philosophy while exposing Model B's conceptual limitations. Model A's deterministic feature-matching approach—aggregating user sentiment across 18 features weighted by global quality confidence $P(5\star \mid F)$—translates into measurable advantages across all three metrics. The confidence scaling mechanism, which amplifies votes for high-quality features (Electronic 96\%, Not-aggressive 94.1\%) while discounting niche preferences, proves essential: Model A's 82.67\% Hit@5 rate demonstrates that prioritizing broadly appealing features with strong global 5-star correlation successfully identifies tracks users will love. The feature importance weights ($W_{\text{Genre}} = 2.25$, $W_{\text{Artist}} = 1.25$) align recommendations with human music perception, as evidenced by the 4.38 average rating—users care more about stylistic categories than technical audio properties. Deterministic ranking's exploitation focus maximizes short-term satisfaction, yielding superior Time-to-5$\star$ (2.33 vs 3.71 positions).
+
+Model B's probabilistic sampling with patience adaptation, while theoretically appealing, fails to translate into performance gains. The $\Delta_u = T_u - 3.6942$ adjustment mechanism—designed to personalize exploration-exploitation trade-offs—introduces stochastic variance that dilutes recommendation accuracy. Patient users receive flattened probability distributions that increase sampling of mid-ranked tracks with lower quality confidence, reducing Hit@5 success. The 5-trial evaluation horizon penalizes exploration, revealing that users prefer immediate satisfaction over serendipitous discoveries. Model B's 3.71 Time-to-5$\star$ approximates the population baseline, suggesting that excessive exploration negates personalization benefits entirely. This demonstrates that probabilistic assumptions about user patience do not translate into measurable advantages when recommendation horizons are short and users exhibit clear preferences.
+
+\textbf{Interpreting results through Parts 1–2 user behavior models:}
+
+The evaluation results validate probabilistic foundations from earlier parts while revealing practical constraints. From Part 1, the feature conditional probabilities $P(5\star \mid F)$ prove directly predictive: Features dominating the 5-star pool (Electronic 96\%, Not-aggressive 94.1\%, Female vocals 72\%) consistently appear in Model A's top recommendations, demonstrating that global quality patterns generalize to individual users. Model A's 4.38 average rating (87.6\% of maximum possible) confirms that personalized conditional probability models successfully identify high-quality tracks by aggregating user-specific feature preferences with population-level quality signals. The hypothesis testing insight—that popular music lovers find favorites 35\% faster (2.92 vs 4.48 rounds)—aligns with Model A's strategy of leveraging broadly appealing, high-quality features rather than niche personalization.
+
+From Part 2, Model A's Time-to-5$\star$ of 2.33 rounds significantly outperforms both the geometric model's population average $\bar{T} = 3.69$ rounds and the Beta-geometric prediction of 2.83 rounds, confirming that feature-based personalization reduces user exploration costs compared to random or popularity-based baselines. However, Model B's 3.71 rounds—approximating the unpersonalized population average—reveals that the Beta-geometric model's patience heterogeneity insight ($\alpha = 3.04$, $\beta = 5.57$) does not translate into effective recommendation strategy. While users exhibit diverse patience levels theoretically, adaptive exploration mechanisms fail when recommendation contexts favor immediate exploitation. This suggests that user behavior models must account for task-specific constraints: patience variability matters for long-term engagement, but short-term recommendation scenarios demand consistent delivery of high-confidence options regardless of individual patience profiles.
+
+\end{document}
