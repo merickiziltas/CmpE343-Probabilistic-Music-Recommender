@@ -119,7 +119,5 @@ python src/recommender.py
 ## 👨‍💻 Authors (Group 108-301-110)
 
 - **Ahmet Meriç Kızıltaş** (2022400225)
-- **Hasan Yiğit Akıncı** (2022400138)
-- **Yunus Yücesoy** (2022400273)
 
 *Department of Computer Engineering, Boğaziçi University*
