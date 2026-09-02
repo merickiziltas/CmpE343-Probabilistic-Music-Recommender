@@ -81,7 +81,7 @@ CmpE343-Probabilistic-Music-Recommender/
 │   └── group.csv          # Team member session ratings
 ├── docs/
 │   ├── report.tex         # Complete LaTeX Academic Paper Source
-│   ├── METRICS_EXPLAINED.md  # Metric definitions breakdown
+│   ├── project_report.pdf # Project Report
 │   └── Project_Description.md# Course project specification
 ├── requirements.txt       # Python dependencies (pandas, numpy, scipy)
 ├── .gitattributes         # LF line ending configuration
